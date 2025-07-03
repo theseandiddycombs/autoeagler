@@ -55,9 +55,9 @@ jobs:
           tag_name: nightly
           name: Nightly Build
           files: |
-            workspace/target_teavm_javascript/javascript/EaglercraftX_1.8_Offline_en_US.html
-            workspace/target_teavm_javascript/javascript/EaglercraftX_1.8_Offline_International.html
-            workspace/target_teavm_wasm_gc/javascript_dist/EaglercraftX_1.8_WASM-GC_Offline_Download.html
+            workspace/target_teavm_javascript/javascript/EaglercraftX_1.8_Offline_en_US-*.html
+            workspace/target_teavm_javascript/javascript/EaglercraftX_1.8_Offline_International-*.html
+            workspace/target_teavm_wasm_gc/javascript_dist/EaglercraftX_1.8_WASM-GC_Offline_Download-*.html
           prerelease: true
           draft: false
           overwrite: true
