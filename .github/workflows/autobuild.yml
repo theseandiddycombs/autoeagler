@@ -49,6 +49,14 @@ jobs:
           for f in target_teavm_javascript/javascript/*.html; do [ -e "$f" ] && mv "$f" "${f%.html}-$VER-$TS.html" || true; done
           for f in target_teavm_wasm_gc/javascript_dist/*.html; do [ -e "$f" ] && mv "$f" "${f%.html}-$VER-$TS.html" || true; done
 
+      - name: Delete all assets from Nightly Release before upload
+        uses: dev-drprasad/delete-tag-and-release@v1.1
+        with:
+          tag_name: nightly
+          delete_release: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create or Update Nightly Release
         uses: softprops/action-gh-release@v2
         with:
@@ -61,7 +69,6 @@ jobs:
           prerelease: true
           draft: false
           overwrite: true
-          remove_assets: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
