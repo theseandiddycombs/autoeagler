@@ -1,0 +1,3 @@
+[submodule "workspace"]
+	path = workspace
+	url = https://github.com/Eaglercraft-Archive/EaglercraftX-1.8-workspace
