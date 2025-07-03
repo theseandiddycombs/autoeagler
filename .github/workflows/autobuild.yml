@@ -36,6 +36,14 @@ jobs:
       - name: Grant execute permission for Gradle wrapper
         run: chmod +x workspace/gradlew
 
+
+      - name: Add timestamp to build files
+        working-directory: workspace
+        run: |
+          TS=$(date +%Y%m%d-%H%M%S)
+          for f in target_teavm_javascript/javascript/*.html; do [ -e "$f" ] && mv "$f" "${f%.html}_$TS.html"; done
+          for f in target_teavm_wasm_gc/javascript_dist/*.html; do [ -e "$f" ] && mv "$f" "${f%.html}_$TS.html"; done
+
       - name: Build all (makeMainOfflineDownload & makeMainWasmClientBundle)
         working-directory: workspace
         run: ./gradlew makeMainOfflineDownload makeMainWasmClientBundle --parallel
