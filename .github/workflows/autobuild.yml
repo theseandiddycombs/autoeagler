@@ -10,9 +10,6 @@ on:
 jobs:
   nightly:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: workspace
     steps:
       - name: Checkout workflow repository (with submodules)
         uses: actions/checkout@v4
@@ -23,9 +20,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            gradle
-            .gradle
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', 'gradle-wrapper.properties', 'gradle/**', 'gradle.properties') }}-${{ github.sha }}
+            workspace/gradle
+            workspace/.gradle
+          key: ${{ runner.os }}-gradle-${{ hashFiles('workspace/**/*.gradle*', 'workspace/gradle-wrapper.properties', 'workspace/gradle/**', 'workspace/gradle.properties') }}-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-gradle-
 
@@ -37,9 +34,10 @@ jobs:
           cache: gradle
 
       - name: Grant execute permission for Gradle wrapper
-        run: chmod +x gradlew
+        run: chmod +x workspace/gradlew
 
       - name: Build all (makeMainOfflineDownload & makeMainWasmClientBundle)
+        working-directory: workspace
         run: ./gradlew makeMainOfflineDownload makeMainWasmClientBundle --parallel
 
       - name: Create or Update Nightly Release
@@ -48,8 +46,8 @@ jobs:
           tag_name: nightly
           name: Nightly Build
           files: |
-            target_teavm_javascript/javascript/*.html
-            target_teavm_wasm_gc/javascript_dist/*.html
+            workspace/target_teavm_javascript/javascript/*.html
+            workspace/target_teavm_wasm_gc/javascript_dist/*.html
           prerelease: true
           draft: false
           overwrite: true
@@ -59,10 +57,10 @@ jobs:
 
       - name: Prepare GitHub Pages content
         run: |
-          mkdir -p ../gh-pages-publish/js ../gh-pages-publish/wasm
-          rm -rf ../gh-pages-publish/js/* ../gh-pages-publish/wasm/*
-          cp -r target_teavm_javascript/javascript/* ../gh-pages-publish/js/
-          cp -r target_teavm_wasm_gc/javascript_dist/* ../gh-pages-publish/wasm/
+          mkdir -p gh-pages-publish/js gh-pages-publish/wasm
+          rm -rf gh-pages-publish/js/* gh-pages-publish/wasm/*
+          cp -r workspace/target_teavm_javascript/javascript/* gh-pages-publish/js/
+          cp -r workspace/target_teavm_wasm_gc/javascript_dist/* gh-pages-publish/wasm/
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
