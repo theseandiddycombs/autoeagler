@@ -1,0 +1,70 @@
+
+name: Nightly Build and Deploy
+
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # Every night at 3 AM UTC
+  workflow_dispatch:
+
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout workflow repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Grant execute permission for Gradle wrapper
+        run: chmod +x ./workspace/gradlew
+
+      - name: Build makeMainOfflineDownload
+        working-directory: ./workspace
+        run: ./gradlew makeMainOfflineDownload
+
+      - name: Build makeMainWasmClientBundle
+        working-directory: ./workspace
+        run: ./gradlew makeMainWasmClientBundle
+
+      - name: Upload JavaScript Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: javascript-artifacts
+          path: workspace/target_teavm_javascript/javascript/
+
+      - name: Upload WASM Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-artifacts
+          path: workspace/target_teavm_wasm_gc/javascript_dist/
+
+      - name: Create or Update Nightly Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: Nightly Build
+          files: |
+            workspace/target_teavm_javascript/javascript/**
+            workspace/target_teavm_wasm_gc/javascript_dist/**
+          prerelease: true
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare GitHub Pages content
+        run: |
+          mkdir -p gh-pages-publish/js gh-pages-publish/wasm
+          rm -rf gh-pages-publish/js/* gh-pages-publish/wasm/*
+          cp -r workspace/target_teavm_javascript/javascript/* gh-pages-publish/js/
+          cp -r workspace/target_teavm_wasm_gc/javascript_dist/* gh-pages-publish/wasm/
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: gh-pages-publish
