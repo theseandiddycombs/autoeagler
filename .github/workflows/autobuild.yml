@@ -41,19 +41,12 @@ jobs:
         working-directory: workspace
         run: ./gradlew makeMainOfflineDownload makeMainWasmClientBundle --parallel
 
-      - name: Add version and timestamp to build files
-        working-directory: workspace
-        run: |
-          TS=$(date +%m%d%Y)
-          VER=$(cat desktopRuntime/resources/EPKVersionIdentifier.txt | tr -d '\n' | tr -d '\r')
-          for f in target_teavm_javascript/javascript/*.html; do [ -e "$f" ] && mv "$f" "${f%.html}-$VER-$TS.html" || true; done
-          for f in target_teavm_wasm_gc/javascript_dist/*.html; do [ -e "$f" ] && mv "$f" "${f%.html}-$VER-$TS.html" || true; done
-
-      - name: Delete all assets from Nightly Release before upload
+      - name: Delete nightly release and tag before upload
         uses: dev-drprasad/delete-tag-and-release@v1.1
         with:
           tag_name: nightly
           delete_release: true
+          delete_tag: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -63,9 +56,9 @@ jobs:
           tag_name: nightly
           name: Nightly Build
           files: |
-            workspace/target_teavm_javascript/javascript/EaglercraftX_1.8_Offline_en_US-*.html
-            workspace/target_teavm_javascript/javascript/EaglercraftX_1.8_Offline_International-*.html
-            workspace/target_teavm_wasm_gc/javascript_dist/EaglercraftX_1.8_WASM-GC_Offline_Download-*.html
+            workspace/target_teavm_javascript/javascript/EaglercraftX_1.8_Offline_en_US.html
+            workspace/target_teavm_javascript/javascript/EaglercraftX_1.8_Offline_International.html
+            workspace/target_teavm_wasm_gc/javascript_dist/EaglercraftX_1.8_WASM-GC_Offline_Download.html
           prerelease: true
           draft: false
           overwrite: true
