@@ -1,8 +1,6 @@
 name: Nightly Build and Deploy
 
 on:
-  push:
-    branches: [ main ]
   schedule:
     - cron: '0 0 * * *' # Every night at midnight UTC
   workflow_dispatch:
@@ -11,10 +9,17 @@ jobs:
   nightly:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout workflow repository (with submodules)
+      - name: Checkout workflow repository (no submodules)
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      - name: Init submodules with fallback
+        run: |
+          set -e
+          git submodule update --init --recursive || (
+            git config submodule.workspace.url https://github.com/Eaglercraft-Archive/EaglercraftX-1.8-workspace.git
+            git submodule sync
+            git submodule update --init --recursive
+          )
 
       - name: Cache Gradle dependencies
         uses: actions/cache@v4
@@ -72,7 +77,7 @@ jobs:
           # Append version info to the index.html page
           if [ -f gh-pages-publish/index.html ] && [ -f workspace/desktopRuntime/resources/EPKVersionIdentifier.txt ]; then \
             VER=$(cat workspace/desktopRuntime/resources/EPKVersionIdentifier.txt | tr -d '\n' | tr -d '\r'); \
-            echo "<div style=\"position:absolute;top:0;right:0;background:#eee;padding:4px;font-size:small;z-index:9999;\">Version: $VER</div>" >> gh-pages-publish/index.html; \
+            echo "<div style=\"position:absolute;top:0;right:0;background:#eee;padding:4px;font-size:small;z-index:9999;\">EaglercraftX Version: $VER</div>" >> gh-pages-publish/index.html; \
           fi
 
       - name: Deploy to GitHub Pages
