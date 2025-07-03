@@ -47,9 +47,7 @@ jobs:
           tag_name: nightly
           delete_release: true
           delete_tag: true
-        with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: gh-pages-publish
 
       - name: Create or Update Nightly Release
         uses: softprops/action-gh-release@v2
@@ -63,8 +61,7 @@ jobs:
           prerelease: true
           draft: false
           overwrite: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Prepare GitHub Pages content
         run: |
