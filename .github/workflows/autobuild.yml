@@ -1,8 +1,9 @@
 
 name: Nightly Build and Deploy
 
-
 on:
+  push:
+    branches: [ main ]
   schedule:
     - cron: '0 3 * * *' # Every night at 3 AM UTC
   workflow_dispatch:
@@ -56,9 +57,8 @@ jobs:
           tag_name: nightly
           name: Nightly Build
           files: |
-            workspace/target_teavm_javascript/javascript/EaglercraftX_1.8_Offline_en_US.html
-            workspace/target_teavm_javascript/javascript/EaglercraftX_1.8_Offline_International.html
-            workspace/target_teavm_wasm_gc/javascript_dist/EaglercraftX_1.8_WASM-GC_Offline_Download.html
+            workspace/target_teavm_javascript/javascript/*.html
+            workspace/target_teavm_wasm_gc/javascript_dist/*.html
           prerelease: true
           draft: false
           overwrite: true
