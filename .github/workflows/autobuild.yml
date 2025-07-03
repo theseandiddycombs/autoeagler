@@ -60,6 +60,7 @@ jobs:
             workspace/target_teavm_wasm_gc/javascript_dist/**
           prerelease: true
           draft: false
+          overwrite: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
