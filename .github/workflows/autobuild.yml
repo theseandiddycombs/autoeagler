@@ -15,10 +15,10 @@ jobs:
       - name: Init submodules with fallback
         run: |
           set -e
-          git submodule update --init --recursive || (
+          git submodule update --init --recursive --remote || (
             git config submodule.workspace.url https://github.com/Eaglercraft-Archive/EaglercraftX-1.8-workspace.git
             git submodule sync
-            git submodule update --init --recursive
+            git submodule update --init --recursive --remote
           )
 
       - name: Cache Gradle dependencies
