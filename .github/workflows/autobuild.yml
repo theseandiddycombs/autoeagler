@@ -21,6 +21,47 @@ jobs:
             git submodule update --init --recursive --remote
           )
 
+      - name: Detect submodule commit change
+        id: check
+        run: |
+          SUBMODULE_DIR=workspace
+          CACHE_FILE=".last-submodule-commit"
+
+          CURRENT_COMMIT=$(cd $SUBMODULE_DIR && git rev-parse HEAD)
+          echo "Current submodule commit: $CURRENT_COMMIT"
+
+          # Load previous commit hash from artifact if exists
+          if [ -f $CACHE_FILE ]; then
+            PREV_COMMIT=$(cat $CACHE_FILE)
+            echo "Previous submodule commit: $PREV_COMMIT"
+          else
+            PREV_COMMIT=""
+            echo "No previous commit found"
+          fi
+
+          echo "$CURRENT_COMMIT" > $CACHE_FILE
+
+          # Set output for use in conditional jobs
+          if [ "$CURRENT_COMMIT" != "$PREV_COMMIT" ]; then
+            echo "Submodule updated."
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "No change in submodule."
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload latest submodule commit for next run
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: last-submodule-commit
+          path: .last-submodule-commit
+          retention-days: 1
+
+      - name: Stop workflow if no submodule change
+        if: steps.check.outputs.changed == 'false'
+        run: echo "No changes detected. Skipping build." && exit 0
+
       - name: Cache Gradle dependencies
         uses: actions/cache@v4
         with:
@@ -40,7 +81,6 @@ jobs:
 
       - name: Grant execute permission for Gradle wrapper
         run: chmod +x workspace/gradlew
-
 
       - name: Build all (makeMainOfflineDownload & makeMainWasmClientBundle)
         working-directory: workspace
@@ -74,7 +114,6 @@ jobs:
           rm -rf gh-pages-publish/js/* gh-pages-publish/wasm/*
           cp -r workspace/target_teavm_javascript/javascript/* gh-pages-publish/js/
           cp -r workspace/target_teavm_wasm_gc/javascript_dist/* gh-pages-publish/wasm/
-          # Append version info to the index.html page
           if [ -f gh-pages-publish/index.html ] && [ -f workspace/desktopRuntime/resources/EPKVersionIdentifier.txt ]; then \
             VER=$(cat workspace/desktopRuntime/resources/EPKVersionIdentifier.txt | tr -d '\n' | tr -d '\r'); \
             echo "<div style=\"position:absolute;top:0;right:0;background:#eee;padding:4px;font-size:small;z-index:9999;\">EaglercraftX Version: $VER</div>" >> gh-pages-publish/index.html; \
