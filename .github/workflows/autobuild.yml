@@ -86,7 +86,7 @@ jobs:
         with:
           name: epk-version-cache
           path: epk-version.txt
-          retention-days: 1
+          retention-days: 2
 
       ##########################################################
       # 6. Stop early if version has not changed
