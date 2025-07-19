@@ -1,8 +1,8 @@
 name: Nightly Build and Deploy
 
 on:
-  schedule:
-    - cron: '0 0 * * *' # Every night at midnight UTC
+  #schedule:
+   # - cron: '0 0 * * *' # Every night at midnight UTC
   workflow_dispatch:
 
 jobs:
