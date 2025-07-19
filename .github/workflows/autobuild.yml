@@ -1,20 +1,82 @@
 name: Nightly Build and Deploy
 
 on:
-  #schedule:
-   # - cron: '0 0 * * *' # Every night at midnight UTC
-  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'
 
 jobs:
-  nightly:
+  check_version:
     runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
     steps:
-      - name: Checkout workflow repository (no submodules)
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Init submodules with fallback
+      - name: Restore version cache
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: .version_cache
+          key: epk-version-cache
+
+      - name: Init submodules
         run: |
-          set -e
+          git submodule update --init --recursive --remote || (
+            git config submodule.workspace.url https://github.com/Eaglercraft-Archive/EaglercraftX-1.8-workspace.git
+            git submodule sync
+            git submodule update --init --recursive --remote
+          )
+
+      - name: Check for version change
+        id: check
+        run: |
+          VERSION_FILE="workspace/desktopRuntime/resources/EPKVersionIdentifier.txt"
+          CACHE_FILE=".version_cache/epk-version.txt"
+
+          if [ ! -f "$VERSION_FILE" ]; then
+            echo "❌ Version file not found!"
+            exit 1
+          fi
+
+          CURRENT_VERSION=$(tr -d '\n\r' < "$VERSION_FILE")
+          echo "🔎 Current version: $CURRENT_VERSION"
+
+          if [ -f "$CACHE_FILE" ]; then
+            PREVIOUS_VERSION=$(cat "$CACHE_FILE")
+            echo "📦 Previous version: $PREVIOUS_VERSION"
+          else
+            PREVIOUS_VERSION=""
+            echo "⚠️ No previous version found."
+          fi
+
+          echo "$CURRENT_VERSION" > epk-version.txt
+
+          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+            echo "✅ Version has changed."
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "⏹️ Version unchanged. Skipping build."
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Save version to cache
+        if: always()
+        run: |
+          mkdir -p .version_cache
+          cp epk-version.txt .version_cache/epk-version.txt
+
+  nightly:
+    needs: check_version
+    if: needs.check_version.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Init submodules
+        run: |
           git submodule update --init --recursive --remote || (
             git config submodule.workspace.url https://github.com/Eaglercraft-Archive/EaglercraftX-1.8-workspace.git
             git submodule sync
@@ -27,7 +89,7 @@ jobs:
           path: |
             workspace/gradle
             workspace/.gradle
-          key: ${{ runner.os }}-gradle-${{ hashFiles('workspace/**/*.gradle*', 'workspace/gradle-wrapper.properties', 'workspace/gradle/**', 'workspace/gradle.properties') }}-${{ github.sha }}
+          key: ${{ runner.os }}-gradle-${{ hashFiles('workspace/**/*.gradle*', 'workspace/gradle-wrapper.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
 
@@ -38,15 +100,14 @@ jobs:
           java-version: '21'
           cache: gradle
 
-      - name: Grant execute permission for Gradle wrapper
+      - name: Make Gradle wrapper executable
         run: chmod +x workspace/gradlew
 
-
-      - name: Build all (makeMainOfflineDownload & makeMainWasmClientBundle)
+      - name: Build project
         working-directory: workspace
         run: ./gradlew makeMainOfflineDownload makeMainWasmClientBundle --parallel
 
-      - name: Delete nightly release and tag before upload
+      - name: Delete existing nightly release and tag
         uses: dev-drprasad/delete-tag-and-release@v1.1
         with:
           tag_name: nightly
@@ -54,30 +115,30 @@ jobs:
           delete_tag: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create or Update Nightly Release
+      - name: Create nightly release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: nightly
           name: Nightly Build
-          files: |
-            workspace/target_teavm_javascript/javascript/EaglercraftX_1.8_Offline_en_US.html
-            workspace/target_teavm_javascript/javascript/EaglercraftX_1.8_Offline_International.html
-            workspace/target_teavm_wasm_gc/javascript_dist/EaglercraftX_1.8_WASM-GC_Offline_Download.html
           prerelease: true
           draft: false
           overwrite: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            workspace/target_teavm_javascript/javascript/EaglercraftX_1.8_Offline_en_US.html
+            workspace/target_teavm_javascript/javascript/EaglercraftX_1.8_Offline_International.html
+            workspace/target_teavm_wasm_gc/javascript_dist/EaglercraftX_1.8_WASM-GC_Offline_Download.html
 
-      - name: Prepare GitHub Pages content
+      - name: Prepare GitHub Pages files
         run: |
           mkdir -p gh-pages-publish/js gh-pages-publish/wasm
           rm -rf gh-pages-publish/js/* gh-pages-publish/wasm/*
           cp -r workspace/target_teavm_javascript/javascript/* gh-pages-publish/js/
           cp -r workspace/target_teavm_wasm_gc/javascript_dist/* gh-pages-publish/wasm/
-          # Append version info to the index.html page
-          if [ -f gh-pages-publish/index.html ] && [ -f workspace/desktopRuntime/resources/EPKVersionIdentifier.txt ]; then \
-            VER=$(cat workspace/desktopRuntime/resources/EPKVersionIdentifier.txt | tr -d '\n' | tr -d '\r'); \
-            echo "<div style=\"position:absolute;top:0;right:0;background:#eee;padding:4px;font-size:small;z-index:9999;\">EaglercraftX Version: $VER</div>" >> gh-pages-publish/index.html; \
+
+          if [ -f workspace/desktopRuntime/resources/EPKVersionIdentifier.txt ]; then
+            VER=$(tr -d '\n\r' < workspace/desktopRuntime/resources/EPKVersionIdentifier.txt)
+            echo "<div style='position:absolute;top:0;right:0;background:#eee;padding:4px;font-size:small;z-index:9999;'>EaglercraftX Version: $VER</div>" > gh-pages-publish/index.html
           fi
 
       - name: Deploy to GitHub Pages
