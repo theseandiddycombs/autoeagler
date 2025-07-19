@@ -18,15 +18,14 @@ jobs:
         uses: actions/checkout@v4
 
       ##########################################################
-      # 2. Download previous version cache (if available)
+      # 2. Restore version cache from previous run
       ##########################################################
-      - name: Download previous version cache
-        id: download_cache
-        uses: actions/download-artifact@v4
+      - name: Restore version cache
+        id: cache_version
+        uses: actions/cache@v4
         with:
-          name: epk-version-cache
           path: .version_cache
-        continue-on-error: true  # In case it's the first run
+          key: epk-version-cache
 
       ##########################################################
       # 3. Initialize submodules
@@ -65,10 +64,8 @@ jobs:
             echo "⚠️ No previous version found."
           fi
 
-          # Save current version for next run
           echo "$CURRENT_VERSION" > epk-version.txt
 
-          # Determine if version changed
           if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
             echo "✅ Version has changed."
             echo "changed=true" >> $GITHUB_OUTPUT
@@ -78,15 +75,13 @@ jobs:
           fi
 
       ##########################################################
-      # 5. Upload current version for next workflow run
+      # 5. Save current version for future run
       ##########################################################
-      - name: Upload version cache
+      - name: Save current version to cache path
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: epk-version-cache
-          path: epk-version.txt
-          retention-days: 2
+        run: |
+          mkdir -p .version_cache
+          cp epk-version.txt .version_cache/epk-version.txt
 
       ##########################################################
       # 6. Stop early if version has not changed
