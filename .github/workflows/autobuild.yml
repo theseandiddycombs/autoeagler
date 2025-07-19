@@ -1,18 +1,27 @@
 name: Nightly Build and Deploy
 
+# This workflow can be triggered manually or on a nightly schedule
 on:
-  #schedule:
-   # - cron: '0 0 * * *' # Every night at midnight UTC
-  workflow_dispatch:
+  # Uncomment the following lines to run the workflow every night at midnight UTC
+  # schedule:
+  #   - cron: '0 0 * * *'
+  workflow_dispatch:  # Allows manual triggering from GitHub UI
 
 jobs:
   nightly:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # Use the latest Ubuntu runner
+
     steps:
-      - name: Checkout workflow repository (no submodules)
+      ##############################################################
+      # 1. Checkout the repository (excluding submodules initially)
+      ##############################################################
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Init submodules with fallback
+      ##############################################################
+      # 2. Initialize submodules (with fallback remote URL)
+      ##############################################################
+      - name: Initialize submodules
         run: |
           set -e
           git submodule update --init --recursive --remote || (
@@ -21,47 +30,67 @@ jobs:
             git submodule update --init --recursive --remote
           )
 
-      - name: Detect submodule commit change
-        id: check
+      ####################################################################
+      # 3. Detect if EPKVersionIdentifier.txt has changed since last run
+      ####################################################################
+      - name: Check for version change
+        id: check_version
         run: |
-          SUBMODULE_DIR=workspace
-          CACHE_FILE=".last-submodule-commit"
+          VERSION_FILE="workspace/desktopRuntime/resources/EPKVersionIdentifier.txt"
+          CACHE_FILE=".epk-version-cache"
 
-          CURRENT_COMMIT=$(cd $SUBMODULE_DIR && git rev-parse HEAD)
-          echo "Current submodule commit: $CURRENT_COMMIT"
-
-          # Load previous commit hash from artifact if exists
-          if [ -f $CACHE_FILE ]; then
-            PREV_COMMIT=$(cat $CACHE_FILE)
-            echo "Previous submodule commit: $PREV_COMMIT"
-          else
-            PREV_COMMIT=""
-            echo "No previous commit found"
+          # Ensure the version file exists
+          if [ ! -f "$VERSION_FILE" ]; then
+            echo "Version file not found!"
+            exit 1
           fi
 
-          echo "$CURRENT_COMMIT" > $CACHE_FILE
+          # Get the current version string, stripping newlines
+          CURRENT_VERSION=$(tr -d '\n\r' < "$VERSION_FILE")
+          echo "Current version: $CURRENT_VERSION"
 
-          # Set output for use in conditional jobs
-          if [ "$CURRENT_COMMIT" != "$PREV_COMMIT" ]; then
-            echo "Submodule updated."
+          # Load previous version (if cached)
+          if [ -f "$CACHE_FILE" ]; then
+            PREVIOUS_VERSION=$(cat "$CACHE_FILE")
+            echo "Previous version: $PREVIOUS_VERSION"
+          else
+            PREVIOUS_VERSION=""
+            echo "No previous version found."
+          fi
+
+          # Save current version for the next run
+          echo "$CURRENT_VERSION" > "$CACHE_FILE"
+
+          # Output whether the version changed
+          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+            echo "Version has changed."
             echo "changed=true" >> $GITHUB_OUTPUT
           else
-            echo "No change in submodule."
+            echo "Version unchanged."
             echo "changed=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Upload latest submodule commit for next run
+      ##############################################################
+      # 4. Upload current version to be used in next workflow run
+      ##############################################################
+      - name: Upload version cache
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: last-submodule-commit
-          path: .last-submodule-commit
+          name: epk-version-cache
+          path: .epk-version-cache
           retention-days: 1
 
-      - name: Stop workflow if no submodule change
-        if: steps.check.outputs.changed == 'false'
-        run: echo "No changes detected. Skipping build." && exit 0
+      #################################################################
+      # 5. Exit early if the version hasn't changed (skip build/deploy)
+      #################################################################
+      - name: Skip if no version change
+        if: steps.check_version.outputs.changed == 'false'
+        run: echo "No version change detected. Skipping build." && exit 0
 
+      ##########################################################
+      # 6. Cache Gradle dependencies to speed up the build
+      ##########################################################
       - name: Cache Gradle dependencies
         uses: actions/cache@v4
         with:
@@ -72,6 +101,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
+      ############################################################
+      # 7. Set up Java Development Kit (JDK) 21 for Gradle build
+      ############################################################
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
@@ -79,14 +111,23 @@ jobs:
           java-version: '21'
           cache: gradle
 
-      - name: Grant execute permission for Gradle wrapper
+      ############################################################
+      # 8. Make sure the Gradle wrapper script is executable
+      ############################################################
+      - name: Make Gradle wrapper executable
         run: chmod +x workspace/gradlew
 
-      - name: Build all (makeMainOfflineDownload & makeMainWasmClientBundle)
+      ############################################################
+      # 9. Build both the JavaScript and WASM client bundles
+      ############################################################
+      - name: Build project
         working-directory: workspace
         run: ./gradlew makeMainOfflineDownload makeMainWasmClientBundle --parallel
 
-      - name: Delete nightly release and tag before upload
+      #######################################################################
+      # 10. Delete any existing 'nightly' GitHub release and tag beforehand
+      #######################################################################
+      - name: Delete existing nightly release
         uses: dev-drprasad/delete-tag-and-release@v1.1
         with:
           tag_name: nightly
@@ -94,31 +135,44 @@ jobs:
           delete_tag: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create or Update Nightly Release
+      ######################################################################
+      # 11. Create or update the nightly GitHub release with built files
+      ######################################################################
+      - name: Create new nightly release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: nightly
           name: Nightly Build
-          files: |
-            workspace/target_teavm_javascript/javascript/EaglercraftX_1.8_Offline_en_US.html
-            workspace/target_teavm_javascript/javascript/EaglercraftX_1.8_Offline_International.html
-            workspace/target_teavm_wasm_gc/javascript_dist/EaglercraftX_1.8_WASM-GC_Offline_Download.html
           prerelease: true
           draft: false
           overwrite: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            workspace/target_teavm_javascript/javascript/EaglercraftX_1.8_Offline_en_US.html
+            workspace/target_teavm_javascript/javascript/EaglercraftX_1.8_Offline_International.html
+            workspace/target_teavm_wasm_gc/javascript_dist/EaglercraftX_1.8_WASM-GC_Offline_Download.html
 
+      ############################################################
+      # 12. Prepare files for deployment to GitHub Pages
+      ############################################################
       - name: Prepare GitHub Pages content
         run: |
           mkdir -p gh-pages-publish/js gh-pages-publish/wasm
           rm -rf gh-pages-publish/js/* gh-pages-publish/wasm/*
+
+          # Copy built assets
           cp -r workspace/target_teavm_javascript/javascript/* gh-pages-publish/js/
           cp -r workspace/target_teavm_wasm_gc/javascript_dist/* gh-pages-publish/wasm/
-          if [ -f gh-pages-publish/index.html ] && [ -f workspace/desktopRuntime/resources/EPKVersionIdentifier.txt ]; then \
-            VER=$(cat workspace/desktopRuntime/resources/EPKVersionIdentifier.txt | tr -d '\n' | tr -d '\r'); \
-            echo "<div style=\"position:absolute;top:0;right:0;background:#eee;padding:4px;font-size:small;z-index:9999;\">EaglercraftX Version: $VER</div>" >> gh-pages-publish/index.html; \
+
+          # Append version to a banner in the index.html
+          if [ -f workspace/desktopRuntime/resources/EPKVersionIdentifier.txt ]; then
+            VERSION=$(tr -d '\n\r' < workspace/desktopRuntime/resources/EPKVersionIdentifier.txt)
+            echo "<div style='position:absolute;top:0;right:0;background:#eee;padding:4px;font-size:small;z-index:9999;'>EaglercraftX Version: $VERSION</div>" > gh-pages-publish/index.html
           fi
 
+      ############################################################
+      # 13. Deploy the generated content to GitHub Pages branch
+      ############################################################
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
