@@ -1,6 +1,6 @@
 # autoeagler
 
-Daily builds of eaglercraft
+Latest builds of EaglercraftX
 
 ## Permanent download links:
 
