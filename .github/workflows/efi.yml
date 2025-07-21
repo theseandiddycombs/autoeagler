@@ -1,8 +1,9 @@
 name: Nightly EFI Build and Deploy
 
 on:
+  # Uncomment to schedule
   # schedule:
-   #  - cron: '0 0 * * *'  # Every night at midnight UTC
+  #   - cron: '0 0 * * *'  # Every night at midnight UTC
   workflow_dispatch:
 
 jobs:
@@ -107,13 +108,13 @@ jobs:
         run: |
           find workspace -name "build.gradle" -exec sed -i 's/^\s*obfuscate\s*=.*$/obfuscate = false/' {} +
 
-      - name: Remove tasks.named("generateJavaScript") block from build.gradle files
+      - name: Remove generateJavaScript tasks block
         run: |
           find workspace -name "build.gradle" | while read file; do
             sed -i '/tasks\.named("generateJavaScript") {/,/^}/d' "$file"
           done
 
-      - name: Apply EFI patch (ForceReflection.java + MainClass.java edit)
+      - name: Apply EFI patch
         run: |
           PATCH_DIR="workspace/src/teavm/java/net/lax1dude/eaglercraft/v1_8/internal/teavm"
           mkdir -p "$PATCH_DIR"
@@ -160,7 +161,6 @@ EOF
         run: |
           mkdir -p efi-output
           cp workspace/target_teavm_javascript/javascript/EaglercraftX_1.8_Offline_en_US.html efi-output/efi.html
-          
 
       - name: Create efi-nightly release
         uses: softprops/action-gh-release@v2
