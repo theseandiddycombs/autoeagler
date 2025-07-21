@@ -1,0 +1,174 @@
+name: Nightly EFI Build and Deploy
+
+on:
+  # schedule:
+   #  - cron: '0 0 * * *'  # Every night at midnight UTC
+  workflow_dispatch:
+
+jobs:
+  check_version:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Restore version cache
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: .version_cache
+          key: epk-version-cache
+
+      - name: Init submodules
+        run: |
+          git submodule update --init --recursive --remote || (
+            git config submodule.workspace.url https://github.com/Eaglercraft-Archive/EaglercraftX-1.8-workspace.git
+            git submodule sync
+            git submodule update --init --recursive --remote
+          )
+
+      - name: Check for version change
+        id: check
+        run: |
+          VERSION_FILE="workspace/desktopRuntime/resources/EPKVersionIdentifier.txt"
+          CACHE_FILE=".version_cache/epk-version.txt"
+
+          if [ ! -f "$VERSION_FILE" ]; then
+            echo "❌ Version file not found!"
+            exit 1
+          fi
+
+          CURRENT_VERSION=$(tr -d '\n\r' < "$VERSION_FILE")
+          echo "🔎 Current version: $CURRENT_VERSION"
+
+          if [ -f "$CACHE_FILE" ]; then
+            PREVIOUS_VERSION=$(cat "$CACHE_FILE")
+            echo "📦 Previous version: $PREVIOUS_VERSION"
+          else
+            PREVIOUS_VERSION=""
+            echo "⚠️ No previous version found."
+          fi
+
+          echo "$CURRENT_VERSION" > epk-version.txt
+
+          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+            echo "✅ Version has changed."
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "⏹️ Version unchanged. Skipping build."
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Save version to cache
+        if: always()
+        run: |
+          mkdir -p .version_cache
+          cp epk-version.txt .version_cache/epk-version.txt
+
+  nightly-efi:
+    needs: check_version
+    if: needs.check_version.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Init submodules
+        run: |
+          git submodule update --init --recursive --remote || (
+            git config submodule.workspace.url https://github.com/Eaglercraft-Archive/EaglercraftX-1.8-workspace.git
+            git submodule sync
+            git submodule update --init --recursive --remote
+          )
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            workspace/gradle
+            workspace/.gradle
+          key: ${{ runner.os }}-gradle-${{ hashFiles('workspace/**/*.gradle*', 'workspace/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: gradle
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x workspace/gradlew
+
+      - name: Disable obfuscation in build.gradle files
+        run: |
+          find workspace -name "build.gradle" -exec sed -i 's/^\s*obfuscate\s*=.*$/obfuscate = false/' {} +
+
+      - name: Remove tasks.named("generateJavaScript") block from build.gradle files
+        run: |
+          find workspace -name "build.gradle" | while read file; do
+            sed -i '/tasks\.named("generateJavaScript") {/,/^}/d' "$file"
+          done
+
+      - name: Apply EFI patch (ForceReflection.java + MainClass.java edit)
+        run: |
+          PATCH_DIR="workspace/src/teavm/java/net/lax1dude/eaglercraft/v1_8/internal/teavm"
+          mkdir -p "$PATCH_DIR"
+
+          cat > "$PATCH_DIR/ForceReflection.java" <<'EOF'
+package net.lax1dude.eaglercraft.v1_8.internal.teavm;
+
+public class ForceReflection {
+    public static Object myObject;
+
+    public static Object forceInit(Class iClass) {
+        myObject = new ReflectiveClass();
+        try {
+            myObject = iClass.newInstance();
+        } catch (Exception e) {
+            // TODO: handle exception
+        }
+        return myObject;
+    }
+
+    public static class ReflectiveClass {
+    }
+}
+EOF
+
+          MAIN_CLASS="workspace/src/teavm/java/net/lax1dude/eaglercraft/v1_8/internal/teavm/MainClass.java"
+
+          if ! grep -q "ForceReflection.forceInit" "$MAIN_CLASS"; then
+            awk '
+              /public static void main\(String\[\] args\) \{/ {
+                print;
+                print "\tForceReflection.forceInit(ForceReflection.class);"
+                next
+              }
+              { print }
+            ' "$MAIN_CLASS" > "$MAIN_CLASS.tmp" && mv "$MAIN_CLASS.tmp" "$MAIN_CLASS"
+          fi
+
+      - name: Build EFI project only
+        working-directory: workspace
+        run: ./gradlew makeMainOfflineDownload --parallel
+
+      - name: Prepare EFI-compatible EaglerForge build
+        run: |
+          mkdir -p efi-output
+          cp workspace/target_teavm_javascript/javascript/EaglercraftX_1.8_Offline_en_US.html efi-output/efi.html
+          
+
+      - name: Create efi-nightly release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: efi-nightly
+          name: EFI Nightly Build
+          prerelease: true
+          draft: false
+          overwrite: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          files: efi-output/efi.html
