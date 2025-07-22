@@ -142,17 +142,20 @@ EOF
 
           MAIN_CLASS="workspace/src/teavm/java/net/lax1dude/eaglercraft/v1_8/internal/teavm/MainClass.java"
 
+          # Ensure import is present
+          grep -q 'ForceReflection' "$MAIN_CLASS" || sed -i '/^package/a import net.lax1dude.eaglercraft.v1_8.internal.teavm.ForceReflection;' "$MAIN_CLASS"
+
+          # Insert forceInit call if missing
           if ! grep -q "ForceReflection.forceInit" "$MAIN_CLASS"; then
             awk '
               /public static void main\(String\[\] args\) \{/ {
                 print;
-                print "\tForceReflection.forceInit(ForceReflection.class);"
+                print "\t\tForceReflection.forceInit(ForceReflection.class);"
                 next
               }
               { print }
             ' "$MAIN_CLASS" > "$MAIN_CLASS.tmp" && mv "$MAIN_CLASS.tmp" "$MAIN_CLASS"
           fi
-
       - name: Build EFI project only
         working-directory: workspace
         run: ./gradlew makeMainOfflineDownload --parallel
