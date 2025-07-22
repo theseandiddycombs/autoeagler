@@ -1,0 +1,35 @@
+name: EaglerForgeInjector Docs Build
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'EaglerForgeInjector/docs/compiling_client.md'
+      - '.github/workflows/efidocs.yml'
+
+jobs:
+  build-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Markdown to HTML converter
+        run: |
+          pip install markdown
+
+      - name: Convert compiling_client.md to HTML
+        run: |
+          mkdir -p EaglerForgeInjector/docs/html
+          python -c "import markdown,sys; html=markdown.markdown(open('EaglerForgeInjector/docs/compiling_client.md').read()); open('EaglerForgeInjector/docs/html/compiling_client.html','w').write(html)"
+
+      - name: Upload HTML artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiling_client_html
+          path: EaglerForgeInjector/docs/html/compiling_client.html

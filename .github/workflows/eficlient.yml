@@ -1,10 +1,12 @@
-name: Nightly EFI Build and Deploy
+name: EFI Client Build and Deploy
 
 on:
-  # Uncomment to schedule
-  # schedule:
-  #   - cron: '0 0 * * *'  # Every night at midnight UTC
   workflow_dispatch:
+  push:
+    paths:
+      - 'EaglerForgeInjector/docs/compiling_client.md'
+      - '.github/workflows/eficlient.yml'
+      - 'workspace/**'
 
 jobs:
   check_version:
@@ -68,7 +70,7 @@ jobs:
           mkdir -p .version_cache
           cp epk-version.txt .version_cache/epk-version.txt
 
-  nightly-efi:
+  build-efi-client:
     needs: check_version
     if: needs.check_version.outputs.changed == 'true'
     runs-on: ubuntu-latest
@@ -143,19 +145,26 @@ EOF
           MAIN_CLASS="workspace/src/teavm/java/net/lax1dude/eaglercraft/v1_8/internal/teavm/MainClass.java"
 
           # Ensure import is present
-          grep -q 'ForceReflection' "$MAIN_CLASS" || sed -i '/^package/a import net.lax1dude.eaglercraft.v1_8.internal.teavm.ForceReflection;' "$MAIN_CLASS"
+          if ! grep -q '^import net\.lax1dude\.eaglercraft\.v1_8\.internal\.teavm\.ForceReflection;' "$MAIN_CLASS"; then
+            sed -i '/^package/a import net.lax1dude.eaglercraft.v1_8.internal.teavm.ForceReflection;' "$MAIN_CLASS"
+          fi
 
           # Insert forceInit call if missing
-          if ! grep -q "ForceReflection.forceInit" "$MAIN_CLASS"; then
+          if ! grep -q "ForceReflection.forceInit(ForceReflection.class);" "$MAIN_CLASS"; then
             awk '
+              BEGIN { inserted=0 }
               /public static void main\(String\[\] args\) \{/ {
                 print;
-                print "\t\tForceReflection.forceInit(ForceReflection.class);"
+                if (!inserted) {
+                  print "        ForceReflection.forceInit(ForceReflection.class);"
+                  inserted=1
+                }
                 next
               }
               { print }
             ' "$MAIN_CLASS" > "$MAIN_CLASS.tmp" && mv "$MAIN_CLASS.tmp" "$MAIN_CLASS"
           fi
+
       - name: Build EFI project only
         working-directory: workspace
         run: ./gradlew makeMainOfflineDownload --parallel
@@ -165,13 +174,8 @@ EOF
           mkdir -p efi-output
           cp workspace/target_teavm_javascript/javascript/EaglercraftX_1.8_Offline_en_US.html efi-output/efi.html
 
-      - name: Create efi-nightly release
-        uses: softprops/action-gh-release@v2
+      - name: Upload EFI HTML artifact
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: efi-nightly
-          name: EFI Nightly Build
-          prerelease: true
-          draft: false
-          overwrite: true
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          files: efi-output/efi.html
+          name: efi_client_html
+          path: efi-output/efi.html
