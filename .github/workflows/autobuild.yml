@@ -138,7 +138,7 @@ jobs:
 
           if [ -f workspace/desktopRuntime/resources/EPKVersionIdentifier.txt ]; then
             VER=$(tr -d '\n\r' < workspace/desktopRuntime/resources/EPKVersionIdentifier.txt)
-            echo "<div style='position:absolute;top:0;right:0;background:#eee;padding:4px;font-size:small;z-index:9999;'>EaglercraftX Version: $VER</div>" > gh-pages-publish/index.html
+            echo "<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Select Client</title><body><h1>Select Client</h1><a href="js/">JavaScript</a><a href="wasm/">WASM</a></div></body></html><div style='position:absolute;top:0;right:0;background:#eee;padding:4px;font-size:small;z-index:9999;'>EaglercraftX Version: $VER</div>" > gh-pages-publish/index.html
           fi
 
       - name: Deploy to GitHub Pages
